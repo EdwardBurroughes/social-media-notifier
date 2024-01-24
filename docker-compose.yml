@@ -1,0 +1,73 @@
+version: "3.7"
+services:
+  rabbitmq:
+    image: rabbitmq:3.9.13-management-alpine
+    container_name: 'rabbitmq'
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+    ports:
+      - 15672:15672
+      - 5672:5672
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "5672" ]
+      interval: 5s
+      timeout: 15s
+      retries: 1
+  
+  consumer:
+    build:
+      context: ./backend/msgQueue
+    restart: on-failure
+    depends_on:
+     - rabbitmq
+    environment:
+      - SLACK_TOKEN=${SLACK_TOKEN}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+
+  db:
+    build:
+      context: ./backend/postgres
+    restart: on-failure
+    # add the default port used for now
+    ports:
+      - 5431:5432
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "5431" ]
+      interval: 5s
+      timeout: 15s
+      retries: 1
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+      - POSTGRES_USER=${POSTGRES_USERNAME}
+    # persist data using volumes
+
+  scheduler:
+    build:
+      context: ./backend/scheduler
+    restart: always
+    depends_on:
+      - db
+      - rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+      - POSTGRES_USER=${POSTGRES_USERNAME}
+
+  api:
+    build:
+      context: ./backend/api
+    restart: on-failure
+    ports:
+      - '3000:3000'
+    depends_on:
+      - db
+      - rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+      - POSTGRES_USER=${POSTGRES_USERNAME}
